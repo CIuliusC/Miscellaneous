@@ -9,6 +9,9 @@ import pycuda.driver      as     drv
 import pycuda.gpuarray    as     gpuarray
 import pycuda.autoinit
 
+FFTWFile    = 'D:\\FFTW64\\libfftw3-3.dll'
+FFTW64      = cdll.LoadLibrary(FFTWFile)
+
 lib = cdll.LoadLibrary('D:\\CEM\\ICECOM2019\\NUFFT_Library\\x64\\Release\\NUFFT_Library.dll')
 
 #############
@@ -54,7 +57,7 @@ d_t             = gpuarray.to_gpu(h_t)
 d_f             = gpuarray.to_gpu(h_f)
 d_F             = gpuarray.zeros((1, N), dtype = np.complex128)
 
-print(type(eps))
+#print(type(eps))
 #dd.restype = c_double
 lib.NFFT3_2D_GPU.argtypes = [POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), c_double, c_int, c_int]
 lib.NFFT3_2D_GPU(ctypes.cast(d_x.ptr, POINTER(c_double)), 
@@ -67,10 +70,34 @@ lib.NFFT3_2D_GPU(ctypes.cast(d_x.ptr, POINTER(c_double)),
                  N, 
                  M)
 
-F2 = NUDFT3_2D(h_x, h_y, h_s, h_t, h_f)
+lib.NFFT3_2D_CPU.argtypes = [POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), c_double, c_int, c_int]
+doublep = ctypes.POINTER(ctypes.c_double)
 
-print(d_F)
-print(F2)
+h_F_C           = np.zeros((1, N), dtype = np.complex128)
+lib.NFFT3_2D_CPU(h_x.ctypes.data_as(doublep), 
+                 h_y.ctypes.data_as(doublep), 
+                 h_s.ctypes.data_as(doublep), 
+                 h_t.ctypes.data_as(doublep), 
+                 h_f.ctypes.data_as(doublep), 
+                 h_F_C.ctypes.data_as(doublep), 
+                 eps, 
+                 N,
+                 M)
+
+
+h_F = np.transpose(NUDFT3_2D(h_x, h_y, h_s, h_t, h_f))
+
+h_F_CUDA = d_F.get()
+exponent = np.ones((M, N), dtype = np.int32)
+errNorm1 = 100 * np.sqrt(np.sum(np.float_power(np.abs(h_F - h_F_CUDA), exponent)) / np.sum(np.float_power(np.abs(h_F), exponent)))
+errNorm2 = 100 * np.sqrt(np.sum(np.float_power(np.abs(h_F - h_F_C), exponent)) / np.sum(np.float_power(np.abs(h_F), exponent)))
+print(errNorm1)
+print(errNorm2)
+
+
+print(h_F)
+print(h_F_CUDA)
+print(h_F_C)
 
 """ timeNUDFT = 0;
 for k = 1 : Nruns

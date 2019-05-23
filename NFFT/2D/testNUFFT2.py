@@ -9,10 +9,13 @@ import pycuda.driver      as     drv
 import pycuda.gpuarray    as     gpuarray
 import pycuda.autoinit
 
+FFTWFile    = 'D:\\FFTW64\\libfftw3-3.dll'
+FFTW64      = cdll.LoadLibrary(FFTWFile)
+
 lib = cdll.LoadLibrary('D:\\CEM\\ICECOM2019\\NUFFT_Library\\x64\\Release\\NUFFT_Library.dll')
 
 #############
-# NUDFT3_2D #
+# NUDFT2_2D #
 #############
 def NUDFT2_2D(h_x, h_y, h_data, M, N):
 
@@ -43,8 +46,8 @@ M_x             = 11
 M_y             = 11
 
 # --- N x M output points
-N               = 4
-M               = 6
+N               = 2
+M               = 4
 
 lamb            = 1
 
@@ -58,6 +61,8 @@ d_data          = gpuarray.to_gpu(h_data)
 
 d_result        = gpuarray.zeros((M, N), dtype = np.complex128)
 
+#print(np.reshape(h_data, (h_data.size, 1)))
+
 lib.NFFT2_2D_GPU.argtypes = [POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), c_int, c_int, c_int]
 lib.NFFT2_2D_GPU(ctypes.cast(d_result.ptr, POINTER(c_double)), 
                  ctypes.cast(d_data.ptr, POINTER(c_double)), 
@@ -67,11 +72,28 @@ lib.NFFT2_2D_GPU(ctypes.cast(d_result.ptr, POINTER(c_double)),
                  M,
                  M_x * M_y)
 
-h_result = NUDFT2_2D(h_x, h_y, h_data, M, N), (N * M, 1)
+h_result_C      = np.zeros((M, N), dtype = np.complex128)
+lib.NFFT2_2D_CPU.argtypes = [POINTER(c_double), POINTER(c_double), POINTER(c_double), POINTER(c_double), c_int, c_int, c_int]
+doublep = ctypes.POINTER(ctypes.c_double)
+lib.NFFT2_2D_CPU(h_result_C.ctypes.data_as(doublep), 
+                 h_data.ctypes.data_as(doublep), 
+                 h_x.ctypes.data_as(doublep), 
+                 h_y.ctypes.data_as(doublep), 
+                 N, 
+                 M,
+                 M_x * M_y)
 
-#h_result_CUDA = np.reshape(np.transpose(np.reshape(np.reshape(d_result.get(), (N * M, 1)), (N, M))), (N * M, 1))
-#h_result_CUDA = np.reshape(np.reshape(d_result.get(), (N * M, 1)), (N, M))
-#h_result_CUDA = np.reshape(d_result.get(), (N * M, 1))
-h_result_CUDA = d_result.get()
-print(h_result_CUDA)
-print(h_result)
+
+h_result = NUDFT2_2D(h_x, h_y, h_data, M, N)
+
+h_result_CUDA = np.reshape(d_result.get(), (M, N))
+""" print(h_result_CUDA)
+print(h_result) """
+
+exponent = np.ones((M, N), dtype = np.int32)
+errNorm1 = 100 * np.sqrt(np.sum(np.float_power(np.abs(h_result - h_result_CUDA), exponent)) / np.sum(np.float_power(np.abs(h_result), exponent)))
+#print(h_result_C)
+#print(h_result_CUDA)
+errNorm2 = 100 * np.sqrt(np.sum(np.float_power(np.abs(h_result - h_result_C), exponent)) / np.sum(np.float_power(np.abs(h_result), exponent)))
+print(errNorm1)
+print(errNorm2)
